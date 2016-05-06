@@ -1233,31 +1233,9 @@ class UkuuPeople {
     <script>
     <!--Custom touchpoint contact dialog box-->
        jQuery(function($) {
-           $( "#dialog" ).dialog({
-             modal : true,
-                 autoOpen: false,
-                 show: {
-               effect: "blind",
-                   duration: 1000
-                   },
-                 hide: {
-               effect: "explode",
-                   duration: 1000
-                   },
-                 buttons: {
-                   Ok: function() {
-                   $( this ).dialog( "close" );
-                   $val = $( "select[name='touchpoint_assign_name']" ).val();
-                   $text = $( "select[name='touchpoint_assign_name'] option:selected" ).text();
-                   jQuery( "#touchpoint_assign_name_display" ).val( $text );
-                   jQuery( "#touchpoint_assign_id" ).val( $val );
-                   $( "#touchpoint_assign_name_display" ).show();
-                 }
-               }
-                 });
-
            $( "#dashboard-widgets-wrap #ukuuCRM-dashboard-createactivity-widget .quickadd input[name='dassign']" ).click(function() {
-               $( "#dialog" ).dialog( "open" );
+              $( "#touchpoint_assign_name_display" ).show();
+              $( ".seprate" ).show();
              });
            var datearr = {
            dateFormat : 'dd-mm-yy',
@@ -1332,6 +1310,7 @@ class UkuuPeople {
       <td class="quickadd-label"></td>
       <td><input type="button" name="dassign" value="<?php _e('Click to select Assignee', 'UkuuPeople') ?>">
       <input type="text" id="touchpoint_assign_name_display" name="touchpoint_assign_name_display" style="display:none">
+      <p id="new-tag-post_tag-desc" class="seprate" style ="color:#666;font-style:italic;display:none;">Separate assigness with commas</p>
       <input type="hidden" id="touchpoint_assign_id" name="touchpoint_assign_id"></td>
       </tr>
 

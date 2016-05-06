@@ -161,6 +161,51 @@ jQuery(document).ready(function() {
     });
 
 
+  function split( val ) {
+    return val.split( /,\s*/ );
+  }
+
+  function extractLast( term ) {
+    return split( term ).pop();
+  }
+
+// autocomplete for quick add touchpoint "assign to" comma seprate.
+   jQuery( "#dashboard-widgets-wrap #ukuuCRM-dashboard-createactivity-widget .quickadd input[name='touchpoint_assign_name_display']" )
+    .autocomplete({
+	minLength: 0,
+   source: function( request, response ) {
+response( jQuery.ui.autocomplete.filter(
+assing_result, extractLast( request.term ) ) );
+},
+	focus: function( event, ui ) {
+	    return false;
+	},
+	select: function( event, ui ) {
+        var terms = split( this.value );
+        terms.pop();
+        this.value = terms.join( ", " );
+        var selected_label = ui.item.label;
+        var selected_value = ui.item.value;
+
+        var labels = jQuery(".quickadd input[name='touchpoint_assign_name_display']").val();
+        var values = jQuery( "#touchpoint_assign_id" ).val();
+
+        if(labels == "") {
+        jQuery(".quickadd input[name='touchpoint_assign_name_display']").val(selected_label);
+        jQuery( "#touchpoint_assign_id" ).val(selected_value);
+      }
+       else {
+        jQuery(".quickadd input[name='touchpoint_assign_name_display']").val(labels+","+selected_label);
+        jQuery( "#touchpoint_assign_id" ).val(values+","+selected_value);
+      }
+	    return false;
+	}
+    }).autocomplete( "instance" )._renderItem = function( ul, item ) {
+	return jQuery( "<li>" )
+	    .append( "<a>" + item.label + "</a>" )
+	    .appendTo( ul );
+    };
+
     // autocomplete for quick add touchpoint
     jQuery( "#dashboard-widgets-wrap #ukuuCRM-dashboard-createactivity-widget .quickadd input[name='dname']" ).autocomplete({
 	//source: availableTags,
@@ -233,6 +278,7 @@ jQuery(document).ready(function() {
 	jQuery('#quickAddform').trigger('reset');
 	jQuery(".quickadd #filename").hide();
 	jQuery(".quickadd #touchpoint_assign_name_display").hide();
+	jQuery(".quickadd .seprate").hide();
     });
 
     jQuery("#dashboard-widgets-wrap #ukuuCRM-dashboard-createactivity-widget .quickadd input[name='dupload']").click( function() {
