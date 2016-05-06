@@ -145,7 +145,7 @@ class UkuuPeople {
     add_filter( 'map_meta_cap', array( $this, 'set_meta_cap_ukuupeople' ), 10, 4 );
     add_filter( 'posts_clauses', array( $this, 'ukuupeople_query_clauses' ), 1, 2);
     add_filter( 'map_meta_cap', array( $this,'touchpoint_map_meta_cap'), 10, 4 );
-    add_filter( 'posts_clauses', array( $this, 'touchpoint_query_clauses' ), 20, 1 );
+    add_filter( 'posts_clauses', array( $this, 'touchpoint_query_clauses' ), 20, 2 );
     add_action( 'do_meta_boxes' , array( $this, 'remove_post_custom_fields' ) );
   }
 
@@ -191,8 +191,8 @@ class UkuuPeople {
     return $caps;
   }
 
-  function touchpoint_query_clauses( $pieces ) {
-    global $wpdb, $user_info;
+  function touchpoint_query_clauses( $pieces, $query ) {
+    global $wpdb, $user_info, $pagenow;
     $user_info = wp_get_current_user();
     // Filter Opportunities By Logged-In User
     // Switch Condition implements this join but for remaining conditions we need to implement this
@@ -201,8 +201,12 @@ class UkuuPeople {
         $pieces['join'] .= " INNER JOIN {$wpdb->postmeta} ON ( {$wpdb->posts}.ID = {$wpdb->postmeta}.post_id )";
       }
 
-      $pieces['where'] = " AND {$wpdb->posts}.post_type = 'wp-type-activity' AND ({$wpdb->posts}.post_status = 'publish' OR {$wpdb->posts}.post_status = 'future' OR {$wpdb->posts}.post_status = 'draft' OR {$wpdb->posts}.post_status = 'pending' OR {$wpdb->posts}.post_status = 'private' )";
-
+      if ( isset( $_GET['post_status'] ) && $_GET['post_status'] == 'trash' ) {
+        $pieces['where'] = " AND {$wpdb->posts}.post_type = 'wp-type-activity' AND ({$wpdb->posts}.post_status = 'trash')";
+      }
+      else {
+        $pieces['where'] = " AND {$wpdb->posts}.post_type = 'wp-type-activity' AND ({$wpdb->posts}.post_status = 'publish' OR {$wpdb->posts}.post_status = 'future' OR {$wpdb->posts}.post_status = 'draft' OR {$wpdb->posts}.post_status = 'pending' OR {$wpdb->posts}.post_status = 'private' )";
+      }
       // If user has read_all_permissions OR edit_all_permissions OR delete_all_permissions then display all opportunities
       $access_all = FALSE;
       foreach ( array( 'read_all_touchpoints', 'edit_all_touchpoints', 'delete_all_touchpoints' ) as $permission ) {
@@ -236,6 +240,17 @@ class UkuuPeople {
         $pieces['groupby'] .= " {$wpdb->posts}.ID";
       }
     }
+
+    if( $pagenow == 'edit.php' && isset( $_GET['post_type'] ) && 'wp-type-activity' == $_GET['post_type']  && $query->is_main_query() )  {
+      if(  ( isset($_GET['wp-type-activity-types']) && $_GET['wp-type-activity-types'] != '' ) ) {
+        $pieces['join'] .= " INNER JOIN wp_terms ON (wp_term_relationships.term_taxonomy_id = wp_terms.term_id)";
+      }
+
+      if( 'wp-type-activity' == $_GET['post_type'] && isset( $_GET['wp-type-activity-types'] ) && $_GET['wp-type-activity-types'] != '' ) {
+        $subtype = $_GET['wp-type-activity-types'];
+        $pieces['where'] .= " AND (wp_terms.slug = '$subtype')";
+      }
+    }    
     return $pieces;
   }
 
@@ -1786,6 +1801,37 @@ class UkuuPeople {
                $tax_slug,
                $tax_slug
                ) , OBJECT );
+
+          $get_trash = $wpdb->get_results( $wpdb->prepare(
+               "
+               SELECT $wpdb->terms.term_id, $wpdb->terms.slug , $wpdb->terms.name, COALESCE(s.count ,0) AS count
+               FROM $wpdb->terms
+               LEFT JOIN $wpdb->term_taxonomy ON ($wpdb->terms.term_id = $wpdb->term_taxonomy.term_id)
+               LEFT JOIN (SELECT  COUNT($wpdb->posts.ID) as count, slug , name , $wpdb->terms.term_id FROM $wpdb->users
+               LEFT JOIN $wpdb->posts ON ($wpdb->posts.post_author = $wpdb->users.ID)
+               LEFT JOIN $wpdb->term_relationships ON ($wpdb->posts.ID = $wpdb->term_relationships.object_id)
+               LEFT JOIN $wpdb->term_taxonomy ON ($wpdb->term_relationships.term_taxonomy_id = $wpdb->term_taxonomy.term_taxonomy_id)
+               LEFT JOIN $wpdb->terms ON ($wpdb->term_taxonomy.term_id = $wpdb->terms.term_id)
+               WHERE (post_status = 'trash')
+               AND (post_author = %d OR $wpdb->posts.ID IN (SELECT $wpdb->posts.ID FROM $wpdb->postmeta LEFT JOIN $wpdb->posts ON ( $wpdb->posts.ID = $wpdb->postmeta.post_id) WHERE ( ($wpdb->postmeta.meta_key = '_wpcf_belongs_wp-type-contacts_id' AND $wpdb->postmeta.meta_value = %d) OR ($wpdb->postmeta.meta_key = 'wpcf_assigned_to' AND $wpdb->postmeta.meta_value = '{$que}') ) AND $wpdb->posts.post_author != %d ))
+               AND post_type = 'wp-type-activity'
+               AND slug IS NOT NULL
+               AND taxonomy= %s group by slug ) as s
+               ON ($wpdb->term_taxonomy.term_id = s.term_id)
+               WHERE taxonomy= %s ORDER BY $wpdb->terms.term_id ASC
+               ",
+               $user_ID,
+               $postslist[0],
+               $user_ID,
+               $tax_slug,
+               $tax_slug
+               ) , OBJECT );
+
+          $trashCount = 0;
+          foreach ( $get_trash as $trash_object ) {
+            $trashCount += $trash_object->count;
+          }
+
         } else {
           $terms = $wpdb->get_results( $wpdb->prepare(
                      "
@@ -1849,7 +1895,10 @@ class UkuuPeople {
       echo "</select>";
       $count_posts = (array) wp_count_posts( $typenow );
       unset($count_posts['auto-draft']);
-      $counts = array_sum( $count_posts );
+      $counts = $count_posts['private'];
+      // backward compatibility
+      if ( isset( $count_posts['publish'] ) )
+        $counts += $count_posts['publish'];
       if( !in_array( 'administrator', $current_user->roles) ){
         $counts = 0;
         foreach( $terms as $k => $v ){
@@ -1858,7 +1907,7 @@ class UkuuPeople {
       }
       $selected = ( count( $_GET ) == 1 ) ? 'current' : '';
       $string[]  = "<li class='all'><a href=' ". add_query_arg( array( 'post_type' => 'wp-type-activity' ) ,$url )."' class='$selected'>".__( 'All', 'UkuuPeople' )." </a>($counts)</li>";
-      $trashCount = $count_posts['trash'];
+      $trashCount = isset( $trashCount ) ? $trashCount : $count_posts['trash'];
       $selected = isset( $_GET['post_status'] ) && $_GET['post_status'] == 'trash' ? 'current' : '';
       $string[]  = "<li class='trash'><a href=' ". add_query_arg( array('post_type' => 'wp-type-activity', 'post_status' => 'trash') ,$url )."' class='$selected'>".__( 'Trash', 'UkuuPeople' )."</a>($trashCount)</li>";
       if ( !empty( $graphTouchpoint ) ) {
