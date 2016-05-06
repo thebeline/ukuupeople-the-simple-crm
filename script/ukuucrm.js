@@ -267,6 +267,20 @@ jQuery(document).ready(function() {
     jQuery('#wpcf-startdate_time').removeAttr( "required" );
 
     jQuery("#wpcf_touchpoint_assigned_metabox .cmb-add-row-button.button").text('Add another Assignee');
+    /* Date of Birth Validation */
+    jQuery('input[name="publish"]').prop('disabled', false);
+    jQuery("#wpcf-ukuu-date-of-birth").change( function() {
+      var currentDateTime = new Date();
+      if( new Date(this.value) > new Date(currentDateTime) ) {
+	    jQuery('.invalidrange').remove();
+	    jQuery('<div class="invalidrange">Invalid date of birth</div>').insertAfter(".cmb2-id-wpcf-ukuu-date-of-birth .cmb-td");
+	    jQuery('.invalidrange').css('color','red');
+	    jQuery('input[id="publish"]').prop('disabled', true);
+	    } else {
+	    jQuery('.invalidrange').remove();
+	    jQuery('input[id="publish"]').prop('disabled', false);
+	  }
+  });
 });
 
 //graph on Contact and event list
