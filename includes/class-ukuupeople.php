@@ -205,7 +205,7 @@ class UkuuPeople {
         $pieces['where'] = " AND {$wpdb->posts}.post_type = 'wp-type-activity' AND ({$wpdb->posts}.post_status = 'trash')";
       }
 
-      if ( isset($_GET['s']) ) {
+      else if ( isset($_GET['s']) ) {
         $search = $_GET['s'];
         $pieces['where'] =  "AND ((({$wpdb->posts}.post_title LIKE '%{$search}%') OR ({$wpdb->posts}.post_content LIKE '%{$search}%')))  AND {$wpdb->posts}.post_type = 'wp-type-activity' AND ({$wpdb->posts}.post_status = 'publish' OR {$wpdb->posts}.post_status = 'future' OR {$wpdb->posts}.post_status = 'draft' OR {$wpdb->posts}.post_status = 'pending' OR {$wpdb->posts}.post_status = 'private')";
       }
