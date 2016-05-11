@@ -510,3 +510,13 @@ jQuery( '#graph' ).ready(function() {
 	    .attr('class', 'y axis');
     }
 });
+
+ // Alter taxonomy field for single-selection in quick edit (for touchpoint only)
+ jQuery(".wp-type-activity-types-checklist input[type='checkbox']").on('click', function () {
+  var current_selection = jQuery(this).val();
+
+  jQuery(".cat-checklist input[type='checkbox']").each( function (index, value) {
+    if ( jQuery(this).val() != current_selection )
+      jQuery(this).prop('checked', false);
+  });
+});
