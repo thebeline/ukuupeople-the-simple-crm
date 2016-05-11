@@ -196,7 +196,7 @@ class UkuuPeople {
     $user_info = wp_get_current_user();
     // Filter Opportunities By Logged-In User
     // Switch Condition implements this join but for remaining conditions we need to implement this
-    if ( isset( $_GET['post_type'] ) && $_GET['post_type'] == 'wp-type-activity' && $user_info->ID > 1 ) {
+     if ( isset( $_GET['post_type'] ) && $_GET['post_type'] == 'wp-type-activity' ) {
       if ( strpos( $pieces['join'], $wpdb->postmeta ) == false ) {
         $pieces['join'] .= " INNER JOIN {$wpdb->postmeta} ON ( {$wpdb->posts}.ID = {$wpdb->postmeta}.post_id )";
       }
@@ -204,12 +204,10 @@ class UkuuPeople {
       if ( isset( $_GET['post_status'] ) && $_GET['post_status'] == 'trash' ) {
         $pieces['where'] = " AND {$wpdb->posts}.post_type = 'wp-type-activity' AND ({$wpdb->posts}.post_status = 'trash')";
       }
-
       else if ( isset($_GET['s']) ) {
         $search = $_GET['s'];
         $pieces['where'] =  "AND ((({$wpdb->posts}.post_title LIKE '%{$search}%') OR ({$wpdb->posts}.post_content LIKE '%{$search}%')))  AND {$wpdb->posts}.post_type = 'wp-type-activity' AND ({$wpdb->posts}.post_status = 'publish' OR {$wpdb->posts}.post_status = 'future' OR {$wpdb->posts}.post_status = 'draft' OR {$wpdb->posts}.post_status = 'pending' OR {$wpdb->posts}.post_status = 'private')";
       }
-
       else {
         $pieces['where'] = " AND {$wpdb->posts}.post_type = 'wp-type-activity' AND ({$wpdb->posts}.post_status = 'publish' OR {$wpdb->posts}.post_status = 'future' OR {$wpdb->posts}.post_status = 'draft' OR {$wpdb->posts}.post_status = 'pending' OR {$wpdb->posts}.post_status = 'private' )";
       }
@@ -223,7 +221,6 @@ class UkuuPeople {
       }
 
       if ( ! $access_all ) {
-
         //$que = "SELECT spm.post_id FROM {$wpdb->postmeta} spm WHERE spm.meta_value = '{$user_info->user_email}' AND spm.meta_key = 'wpcf-email'";
         $que = $wpdb->get_results( $wpdb->prepare(
                "
@@ -238,7 +235,6 @@ class UkuuPeople {
         $que = serialize($data);
 
         $pieces['where'] .= " AND ( {$wpdb->posts}.post_author = {$user_info->ID} OR ( {$wpdb->postmeta}.meta_key = '_wpcf_belongs_wp-type-contacts_id' AND {$wpdb->postmeta}.meta_value = (SELECT spm.post_id FROM {$wpdb->postmeta} spm WHERE spm.meta_value = '{$user_info->user_email}' AND spm.meta_key = 'wpcf-email') ) OR ( {$wpdb->postmeta}.meta_key = 'wpcf_assigned_to' AND {$wpdb->postmeta}.meta_value = '{$que}' ) ) ";
-
       }
 
       // Similar scenario for groupby
@@ -272,12 +268,19 @@ class UkuuPeople {
     $user_info = wp_get_current_user();
     // Filter Opportunities By Logged-In User
     // Switch Condition implements this join but for remaining conditions we need to implement this
-    if ( isset( $_GET['post_type'] ) && $_GET['post_type'] == 'wp-type-contacts' && $user_info->ID > 1 ) {
+    if ( isset( $_GET['post_type'] ) && $_GET['post_type'] == 'wp-type-contacts' && !isset($_GET['s']) ) {
       if ( strpos( $pieces['join'], $wpdb->postmeta ) == false ) {
         $pieces['join'] .= " INNER JOIN {$wpdb->postmeta} ON ( {$wpdb->posts}.ID = {$wpdb->postmeta}.post_id )";
       }
 
       $pieces['where'] = " AND ( {$wpdb->postmeta}.meta_key = 'wpcf-email' ) AND {$wpdb->posts}.post_type = 'wp-type-contacts' AND ({$wpdb->posts}.post_status = 'publish' OR {$wpdb->posts}.post_status = 'future' OR {$wpdb->posts}.post_status = 'draft' OR {$wpdb->posts}.post_status = 'pending' OR {$wpdb->posts}.post_status = 'private' )";
+
+      if ( isset( $_GET['post_status'] ) && $_GET['post_status'] == 'trash' ) {
+        $pieces['where'] = " AND {$wpdb->posts}.post_type = 'wp-type-contacts' AND ({$wpdb->posts}.post_status = 'trash')";
+      }
+      else {
+        $pieces['where'] = " AND {$wpdb->posts}.post_type = 'wp-type-contacts' AND ({$wpdb->posts}.post_status = 'publish' OR {$wpdb->posts}.post_status = 'future' OR {$wpdb->posts}.post_status = 'draft' OR {$wpdb->posts}.post_status = 'pending' OR {$wpdb->posts}.post_status = 'private' )";
+      }
 
       // If user has read_all_permissions OR edit_all_permissions OR delete_all_permissions then display all opportunities
       $access_all = FALSE;
@@ -287,8 +290,7 @@ class UkuuPeople {
           break;
         }
       }
-
-      if ( ! $access_all ) {
+      if ( !$access_all ) {
         $pieces['where'] .= " AND ( {$wpdb->posts}.post_author = {$user_info->ID} OR ( {$wpdb->postmeta}.meta_key = 'wpcf-email' AND {$wpdb->postmeta}.meta_value = '{$user_info->user_email}' ) ) ";
       }
 
@@ -299,7 +301,6 @@ class UkuuPeople {
 
     if( $pagenow == 'edit.php' && isset( $_GET['post_type'] ) && 'wp-type-contacts' == $_GET['post_type']  && $query->is_main_query() )  {
       $user = wp_get_current_user();
-      if( !$user->caps['administrator'] ) {
         if( 'wp-type-contacts' == $_GET['post_type'] && ( !isset( $_GET['wp-type-tags'] ) && !isset( $_GET['wp-type-contacts-subtype'] ) && !isset( $_GET['wp-type-group'] ) ) ) {
           $pieces['join'] = " LEFT JOIN wp_term_relationships ON (wp_posts.ID = wp_term_relationships.object_id) LEFT JOIN wp_postmeta ON ( wp_posts.ID = wp_postmeta.post_id ) LEFT JOIN wp_terms ON (wp_term_relationships.term_taxonomy_id = wp_terms.term_id) LEFT JOIN wp_postmeta wp_rd ON wp_rd.post_id = wp_posts.ID AND wp_rd.meta_key = 'meta_value'";
         } elseif( 'wp-type-contacts' == $_GET['post_type'] && ( isset( $_GET['wp-type-contacts-subtype'] ) && $_GET['wp-type-contacts-subtype'] != '' ) && ( ( isset( $_GET['wp-type-tags'] ) && $_GET['wp-type-tags'] == '' ) && ( isset( $_GET['wp-type-group'] ) && $_GET['wp-type-group'] == '' ) ) || ( !isset( $_GET['wp-type-tags'] ) && !isset( $_GET['wp-type-group'] ) ) ) {
@@ -336,7 +337,6 @@ class UkuuPeople {
           $pieces['join'] = " LEFT JOIN wp_term_relationships ON (wp_posts.ID = wp_term_relationships.object_id) LEFT JOIN wp_term_relationships tags ON (wp_posts.ID = tags.object_id) LEFT JOIN wp_postmeta ON ( wp_posts.ID = wp_postmeta.post_id ) LEFT JOIN wp_terms ON (wp_term_relationships.term_taxonomy_id = wp_terms.term_id) LEFT JOIN wp_postmeta wp_rd ON wp_rd.post_id = wp_posts.ID AND wp_rd.meta_key = 'meta_value'";
           $pieces['where'] .= " AND wp_term_relationships.term_taxonomy_id = (SELECT term_id FROM wp_terms WHERE slug = '$group') AND tags.term_taxonomy_id = (SELECT term_id FROM wp_terms WHERE slug = '$tags')";
         }
-      }
     }
     return $pieces;
   }
@@ -996,6 +996,7 @@ class UkuuPeople {
 	        $meta_value,
                $meta_value
         ) , OBJECT );
+
         global $wp_version;
         if ( !empty( $terms ) ) {
           $postID = array_map ( function ( $v ){ return $v->ID; }, $terms );
@@ -1611,6 +1612,11 @@ class UkuuPeople {
   function ukuu_custom_filters_posts() {
     global $typenow;
     $user_ID = get_current_user_id();
+
+    $full_access = FALSE;
+    if ( $user_ID == 1 || user_can( $user_ID, 'edit_all_ukuupeoples' ) || user_can( $user_ID, 'read_all_ukuupeoples' ) || user_can( $user_ID, 'delete_all_ukuupeoples' ) || user_can( $user_ID, 'read_all_touchpoints' ) || user_can( $user_ID, 'edit_all_touchpoints' ) || user_can( $user_ID, 'delete_all_touchpoints' ))
+    $full_access = TRUE;
+
     if ( $typenow == "wp-type-contacts" ) {
       wp_enqueue_script( 'd3', UKUUPEOPLE_RELPATH.'/script/d3/d3.min.js' , array() );
       wp_enqueue_script( 'ukuucrm', UKUUPEOPLE_RELPATH.'/script/ukuucrm.js' , array() );
@@ -1622,7 +1628,7 @@ class UkuuPeople {
         $tax_name = $tax_obj->labels->name;
         global $wpdb, $current_user;
 
-        if ( !in_array( 'administrator', $current_user->roles) ) {
+        if ( ! $full_access ) {
           $terms = $wpdb->get_results( $wpdb->prepare(
                      "
                SELECT $wpdb->terms.term_id, $wpdb->terms.slug , $wpdb->terms.name, COALESCE(s.count ,0) AS count
@@ -1645,7 +1651,36 @@ class UkuuPeople {
                      $tax_slug ,
                      $tax_slug
                    ) , OBJECT);
-        } else {
+
+           $get_trash = $wpdb->get_results( $wpdb->prepare(
+               "
+               SELECT $wpdb->terms.term_id, $wpdb->terms.slug , $wpdb->terms.name, COALESCE(s.count ,0) AS count
+               FROM $wpdb->terms
+               LEFT JOIN $wpdb->term_taxonomy ON ($wpdb->terms.term_id = $wpdb->term_taxonomy.term_id)
+               LEFT JOIN (SELECT  COUNT($wpdb->posts.ID) as count, slug , name , $wpdb->terms.term_id FROM $wpdb->posts
+               LEFT JOIN $wpdb->term_relationships ON ($wpdb->posts.ID = $wpdb->term_relationships.object_id)
+               LEFT JOIN $wpdb->term_taxonomy ON ($wpdb->term_relationships.term_taxonomy_id = $wpdb->term_taxonomy.term_taxonomy_id)
+               LEFT JOIN $wpdb->terms ON ($wpdb->term_taxonomy.term_id = $wpdb->terms.term_id)
+               WHERE (post_status = 'trash')
+               AND post_type = 'wp-type-contacts'
+               AND ( post_author = %d OR post_title = %s )
+               AND slug IS NOT NULL
+               AND taxonomy= %s group by slug ) as s
+               ON ($wpdb->term_taxonomy.term_id = s.term_id)
+               WHERE taxonomy= %s ORDER BY $wpdb->terms.term_id ASC
+               ",
+                     $user_ID,
+                     $current_user->user_email,
+                     $tax_slug ,
+                     $tax_slug
+                   ) , OBJECT);
+
+          $trashCount = 0;
+          foreach ( $get_trash as $trash_object ) {
+            $trashCount += $trash_object->count;
+          }
+        }
+        else {
           $terms = $wpdb->get_results( $wpdb->prepare(
                      "
                SELECT $wpdb->terms.term_id, $wpdb->terms.slug , $wpdb->terms.name, COALESCE(s.count ,0) AS count
@@ -1685,8 +1720,8 @@ class UkuuPeople {
         }
       $count_posts = (array) wp_count_posts( $typenow, 'readable', false );
       unset( $count_posts['auto-draft'] );
-      $counts = array_sum( $count_posts );
-      if( !in_array( 'administrator', $current_user->roles) ) {
+      $counts = $count_posts['private'];
+     if ( ! $full_access ) {
         $counts = 0;
         foreach( $terms as $k => $v ){
           $counts += $v->count;
@@ -1694,7 +1729,7 @@ class UkuuPeople {
       }
       $selected = ( count( $_GET ) == 1 ) ? 'current' : '';
       $string[]  = "<li class='all'><a href='". add_query_arg( array( 'post_type' => 'wp-type-contacts' ) ,$url )."' class='$selected'>".__( 'All','UkuuPeople' )."</a>($counts)</li>";
-      $trashCount = $count_posts['trash'];
+      $trashCount = isset( $trashCount ) ? $trashCount : $count_posts['trash'];
       $selected = isset($_GET['post_status']) && $_GET['post_status'] == 'trash' ? 'current' : '';
       $string[]  = "<li class='trash'><a href=' ". add_query_arg( array('post_type' => 'wp-type-contacts', 'post_status' => 'trash') ,$url)."' class='$selected'>".__( 'Trash', 'UkuuPeople' )."</a>($trashCount)</li>";
       if ( !empty($graph) ) {
@@ -1749,7 +1784,7 @@ class UkuuPeople {
         $tax_obj = get_taxonomy( $tax_slug );
         $tax_name = $tax_obj->labels->name;
         global $wpdb;
-        if ( !in_array( 'administrator', $current_user->roles) ) {
+         if ( ! $full_access ) {
           $que = $wpdb->get_results( $wpdb->prepare(
                    "
                SELECT $wpdb->postmeta.post_id
@@ -1884,7 +1919,7 @@ class UkuuPeople {
       // backward compatibility
       if ( isset( $count_posts['publish'] ) )
         $counts += $count_posts['publish'];
-      if( !in_array( 'administrator', $current_user->roles) ){
+      if ( ! $full_access ) {
         $counts = 0;
         foreach( $terms as $k => $v ){
           $counts += $v->count;
