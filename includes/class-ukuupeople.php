@@ -1909,9 +1909,15 @@ function insert_taxonomy_terms() {
     global $typenow;
     $user_ID = get_current_user_id();
 
-    $full_access = FALSE;
-    if ( $user_ID == 1 || user_can( $user_ID, 'edit_all_ukuupeoples' ) || user_can( $user_ID, 'read_all_ukuupeoples' ) || user_can( $user_ID, 'delete_all_ukuupeoples' ) || user_can( $user_ID, 'read_all_touchpoints' ) || user_can( $user_ID, 'edit_all_touchpoints' ) || user_can( $user_ID, 'delete_all_touchpoints' ))
-    $full_access = TRUE;
+    $full_access = ( $user_ID == 1 );
+
+    if ( !$full_access ) foreach ( array(
+      'edit_all_ukuupeoples', 'read_all_ukuupeoples', 'delete_all_ukuupeoples',
+      'edit_all_touchpoints', 'read_all_touchpoints', 'delete_all_touchpoints',
+    ) as $action) if ( user_can( $user_ID, $action ) ) {
+      $full_access = TRUE;
+      break;
+    }
 
     if ( $typenow == "wp-type-contacts" ) {
       wp_enqueue_script( 'd3', UKUUPEOPLE_RELPATH.'/script/d3/d3.min.js' , array() );
