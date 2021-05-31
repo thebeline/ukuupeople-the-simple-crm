@@ -3149,7 +3149,7 @@ function insert_taxonomy_terms() {
 		</div>
   </div>
   <div class='right-summary-activity'>
-  	<div class='summary-details'><div class='summary-details-head label-subject'>Details</div><div class='summary-details-body'><?php echo $details ?></div>
+  	<div class='summary-details'><div class='summary-details-head label-subject'>Details</div><div class='summary-details-body'><?php echo nl2br($details) ?></div>
   	</div>
   	<div class='summary-assigned-to'><div class='summary-details-head label-subject'><?php _e( 'Assigned to', 'UkuuPeople' ) ?></div>
     <div class='assigned-section' >
