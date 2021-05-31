@@ -152,6 +152,7 @@ class UkuuPeople {
     add_filter( 'map_meta_cap', array( $this,'touchpoint_map_meta_cap'), 10, 4 );
     add_filter( 'posts_clauses', array( $this, 'touchpoint_query_clauses' ), 20, 2 );
     add_action( 'do_meta_boxes' , array( $this, 'remove_post_custom_fields' ) );
+	
     /*
      * TouchPoints Sorting
      */
@@ -448,8 +449,10 @@ class UkuuPeople {
       if(  ( isset($_GET['wp-type-activity-types']) && $_GET['wp-type-activity-types'] != '' ) ) {
         $pieces['join'] .= " INNER JOIN {$wpdb->terms} ON ({$wpdb->term_relationships}.term_taxonomy_id = {$wpdb->terms}.term_id)";
 
-        $subtype = $_GET['wp-type-activity-types'];
-        $pieces['where'] .= " AND ({$wpdb->terms}.slug = '$subtype')";
+		if( 'wp-type-activity' == $_GET['post_type'] ) {
+		  $subtype = $_GET['wp-type-activity-types'];
+		  $pieces['where'] .= " AND ({$wpdb->terms}.slug = '$subtype')";
+		}
       }
 
       if ( isset( $_GET['touchpoint-assignee'] ) && $_GET['touchpoint-assignee'] != '' ) {
@@ -473,15 +476,24 @@ class UkuuPeople {
    * @return array $pieces
    */
   function ukuupeople_query_clauses( $pieces, $query ) {
+    global $wpdb, $user_info, $pagenow;
+
     if ( ! isset( $_GET['post_type'] ) || ! in_array( $_GET['post_type'], array( 'wp-type-contacts', 'wp-type-activity' ) ) ) {
       return $pieces;
     }
 
-    global $wpdb, $user_info, $pagenow;
     $user_info = wp_get_current_user();
     // Filter Opportunities By Logged-In User
     // Switch Condition implements this join but for remaining conditions we need to implement this
-    if ( isset( $_GET['post_type'] ) && $_GET['post_type'] == 'wp-type-contacts' && !isset($_GET['s']) && ! empty( $_GET['s'] ) && !isset($_GET['page']) ) {
+
+    if ( isset( $_GET['post_type'] ) && $_GET['post_type'] == 'wp-type-contacts' && !isset($_GET['s']) && !isset($_GET['page']) ) {
+	
+	  // WAS (in origin/master):
+	  // if ( isset( $_GET['post_type'] ) && $_GET['post_type'] == 'wp-type-contacts' && !isset($_GET['s']) && ! empty( $_GET['s'] ) && !isset($_GET['page']) ) {
+	  // This makes NO sense, this would never trigger, as it requires not set AND not empty on $_GET['s']
+	  // So literally nothing in here would EVER trigger
+	  // I kept the !isset(PAGE) just because...  it seemed like a middle-ground
+	  
       if ( strpos( $pieces['join'], $wpdb->postmeta ) == false ) {
         $pieces['join'] .= " INNER JOIN {$wpdb->postmeta} ON ( {$wpdb->posts}.ID = {$wpdb->postmeta}.post_id )";
       }
@@ -512,81 +524,128 @@ class UkuuPeople {
         $pieces['groupby'] .= " {$wpdb->posts}.ID";
     }
 
-    //Code for sorting contact and activity columns. (this function is linked to make_all_columns_sortable_activity() and make_all_columns_sortable_contacts())
+	//Code for sorting contact and activity columns. (this function is linked to make_all_columns_sortable_activity() and make_all_columns_sortable_contacts())
+	// @TODO: Added my origin, validate (def ON)
+	if (TRUE) {
+	
+		if( isset( $_GET['orderby'] ) ) {
+		  $orderby = $_GET['orderby'];
+		} else {
+		  $orderby = $query->get('orderby');
+		}
+	
+		if ($orderby == NULL && $_GET["post_type"] == "wp-type-activity" ) {
+		  $orderby =  'wp-startdate';
+		}
+		// Check if order by column is not title, since title is not a metavalue
+		if ( $query->is_main_query() && $orderby != NULL ) {
+		  if( isset( $_GET['order'] ) ) {
+			$order = strtoupper( $_GET['order'] );
+		  } else {
+			$order = strtoupper( $query->get('order') );
+		  }
+	
+		  if ( ! in_array( $order, array( 'ASC', 'DESC' ) ) )
+			$order = 'ASC';
+	
+		  switch( $orderby ) {
+			case 'wp-startdate' :
+			  $pieces['join'] .= " LEFT JOIN $wpdb->postmeta wp_rd1 ON wp_rd1.post_id = {$wpdb->posts}.ID AND wp_rd1.meta_key = 'wpcf-startdate'";
+			  $pieces['orderby'] = "wp_rd1.meta_value+0 $order, " . $pieces['orderby'];
+			  break;
+			case 'wp-status' :
+			  $pieces['join'] .= " LEFT JOIN $wpdb->postmeta wp_rd1 ON wp_rd1.post_id = {$wpdb->posts}.ID AND wp_rd1.meta_key = 'wpcf-status'";
+			  $pieces['orderby'] = "wp_rd1.meta_value $order, " . $pieces['orderby'];
+			  break;
+			case 'wp-fullname' :
+			  $pieces['join'] .= " LEFT JOIN {$wpdb->postmeta} wp_rd1 ON wp_rd1.post_id = {$wpdb->posts}.ID AND wp_rd1.meta_key = '_wpcf_belongs_wp-type-activity_id' LEFT JOIN {$wpdb->postmeta} pm3 ON pm3.post_id = wp_rd1.meta_value AND pm3.meta_key = 'wpcf-display-name'";
+			  $pieces['orderby'] = "pm3.meta_value $order, " . $pieces['orderby'];
+			  break;
+			case 'wp-assigned' :
+			  $pieces['join'] .= "LEFT JOIN {$wpdb->postmeta} pm1 ON pm1.post_id = {$wpdb->posts}.ID AND pm1.meta_key = 'wpcf_assigned_to'
+	LEFT JOIN {$wpdb->postmeta} pm1 ON pm1.post_id = SUBSTRING( pm1.meta_value, 15, SUBSTRING( pm1.meta_value, 12)) AND pm1.meta_key = 'wpcf-display-name'";
+			  $pieces['orderby'] = "pm1.meta_value $order, " . $pieces['orderby'];
+			case 'wp-contact-full-name' :
+			  $pieces['join'] .= " LEFT JOIN $wpdb->postmeta wp_rd1 ON wp_rd1.post_id = {$wpdb->posts}.ID AND wp_rd1.meta_key = 'wpcf-display-name'";
+			  $pieces['orderby'] = "wp_rd1.meta_value $order, " . $pieces['orderby'];
+			  break;
+			case 'wp-email' :
+			  $pieces['join'] .= " LEFT JOIN $wpdb->postmeta wp_rd1 ON wp_rd1.post_id = {$wpdb->posts}.ID AND wp_rd1.meta_key = 'wpcf-email'";
+			  $pieces['orderby'] = "wp_rd1.meta_value $order, " . $pieces['orderby'];
+			  break;
+			case 'wp-phone' :
+			  $pieces['join'] .= " LEFT JOIN $wpdb->postmeta wp_rd1 ON wp_rd1.post_id = {$wpdb->posts}.ID AND wp_rd1.meta_key = 'wpcf-phone'";
+			  $pieces['orderby'] = "wp_rd1.meta_value $order, " . $pieces['orderby'];
+			  break;
+			case 'wp-phone' :
+			  $pieces['join'] .= " LEFT JOIN $wpdb->postmeta wp_rd1 ON wp_rd1.post_id = {$wpdb->posts}.ID AND wp_rd1.meta_key = 'wpcf-phone'";
+			  $pieces['orderby'] = "wp_rd1.meta_value $order, " . $pieces['orderby'];
+			  break;
+			case 'wp-inactive_days' :
+			  $pieces['fields']  .= " , IFNULL( TIMESTAMPDIFF( DAY, MAX(p1.post_date), NOW() ), 0 ) as inactive_days";
+			  $pieces['join'] = " LEFT JOIN {$wpdb->postmeta} ON ( {$wpdb->posts}.ID = {$wpdb->postmeta}.meta_value ) LEFT JOIN {$wpdb->posts} p1 ON {$wpdb->postmeta}.post_id = p1.ID AND p1.post_type = 'wp-type-activity'";
+	
+			  $pieces['where'] = " AND {$wpdb->posts}.post_type = 'wp-type-contacts' AND ({$wpdb->posts}.post_status = 'publish' OR {$wpdb->posts}.post_status = 'refunded' OR {$wpdb->posts}.post_status = 'failed' OR {$wpdb->posts}.post_status = 'revoked' OR {$wpdb->posts}.post_status = 'abandoned' OR {$wpdb->posts}.post_status = 'active' OR {$wpdb->posts}.post_status = 'inactive' OR {$wpdb->posts}.post_status = 'future' OR {$wpdb->posts}.post_status = 'draft' OR {$wpdb->posts}.post_status = 'pending' OR {$wpdb->posts}.post_status = 'private')";
+			  $pieces['groupby'] = " {$wpdb->posts}.ID";
+			  $pieces['orderby'] = " inactive_days $order";
+			  break;
+			case 'wp-contact-type' :
+			  $pieces['fields'] .= " ,(SELECT name FROM {$wpdb->terms} WHERE term_id = MAX(tr1.term_taxonomy_id)) as contact_type";
+			  $pieces['join'] .= " LEFT JOIN {$wpdb->postmeta} pm2 ON {$wpdb->posts}.ID = pm2.post_id LEFT JOIN {$wpdb->posts} p11 ON p11.ID = pm2.meta_value AND p11.post_type IN ('wp-type-contacts', 'wp-type-opportunity') LEFT JOIN {$wpdb->term_relationships} tr1 ON tr1.object_id = p11.ID AND tr1.term_taxonomy_id IN ( SELECT term_id FROM {$wpdb->terms} WHERE slug IN ('wp-type-ind-contact', 'wp-type-org-contact'))";
+			  $pieces['groupby'] = " {$wpdb->posts}.ID";
+			  $pieces['orderby'] = " contact_type $order";
+			  break;
+			default :
+			  $pieces['join'] .= " LEFT JOIN $wpdb->postmeta wp_rd1 ON wp_rd1.post_id = {$wpdb->posts}.ID AND wp_rd1.meta_key = '" . $orderby . "'";
+			  $pieces['orderby'] = "wp_rd1.meta_value $order, " . $pieces['orderby'];
+			  break;
+		  }
+		  
+		}
+	}
 
-    if( isset( $_GET['orderby'] ) ) {
-      $orderby = $_GET['orderby'];
-    } else {
-      $orderby = $query->get('orderby');
-    }
-
-    if ($orderby == NULL && $_GET["post_type"] == "wp-type-activity" ) {
-      $orderby =  'wp-startdate';
-    }
-    // Check if order by column is not title, since title is not a metavalue
-    if ( $query->is_main_query() && $orderby != NULL ) {
-      if( isset( $_GET['order'] ) ) {
-        $order = strtoupper( $_GET['order'] );
-      } else {
-        $order = strtoupper( $query->get('order') );
-      }
-
-      if ( ! in_array( $order, array( 'ASC', 'DESC' ) ) )
-        $order = 'ASC';
-
-      switch( $orderby ) {
-        case 'wp-startdate' :
-          $pieces['join'] .= " LEFT JOIN $wpdb->postmeta wp_rd1 ON wp_rd1.post_id = {$wpdb->posts}.ID AND wp_rd1.meta_key = 'wpcf-startdate'";
-          $pieces['orderby'] = "wp_rd1.meta_value+0 $order, " . $pieces['orderby'];
-          break;
-        case 'wp-status' :
-          $pieces['join'] .= " LEFT JOIN $wpdb->postmeta wp_rd1 ON wp_rd1.post_id = {$wpdb->posts}.ID AND wp_rd1.meta_key = 'wpcf-status'";
-          $pieces['orderby'] = "wp_rd1.meta_value $order, " . $pieces['orderby'];
-          break;
-        case 'wp-fullname' :
-          $pieces['join'] .= " LEFT JOIN {$wpdb->postmeta} wp_rd1 ON wp_rd1.post_id = {$wpdb->posts}.ID AND wp_rd1.meta_key = '_wpcf_belongs_wp-type-activity_id' LEFT JOIN {$wpdb->postmeta} pm3 ON pm3.post_id = wp_rd1.meta_value AND pm3.meta_key = 'wpcf-display-name'";
-          $pieces['orderby'] = "pm3.meta_value $order, " . $pieces['orderby'];
-          break;
-        case 'wp-assigned' :
-          $pieces['join'] .= "LEFT JOIN {$wpdb->postmeta} pm1 ON pm1.post_id = {$wpdb->posts}.ID AND pm1.meta_key = 'wpcf_assigned_to'
-LEFT JOIN {$wpdb->postmeta} pm1 ON pm1.post_id = SUBSTRING( pm1.meta_value, 15, SUBSTRING( pm1.meta_value, 12)) AND pm1.meta_key = 'wpcf-display-name'";
-          $pieces['orderby'] = "pm1.meta_value $order, " . $pieces['orderby'];
-        case 'wp-contact-full-name' :
-          $pieces['join'] .= " LEFT JOIN $wpdb->postmeta wp_rd1 ON wp_rd1.post_id = {$wpdb->posts}.ID AND wp_rd1.meta_key = 'wpcf-display-name'";
-          $pieces['orderby'] = "wp_rd1.meta_value $order, " . $pieces['orderby'];
-          break;
-        case 'wp-email' :
-          $pieces['join'] .= " LEFT JOIN $wpdb->postmeta wp_rd1 ON wp_rd1.post_id = {$wpdb->posts}.ID AND wp_rd1.meta_key = 'wpcf-email'";
-          $pieces['orderby'] = "wp_rd1.meta_value $order, " . $pieces['orderby'];
-          break;
-        case 'wp-phone' :
-          $pieces['join'] .= " LEFT JOIN $wpdb->postmeta wp_rd1 ON wp_rd1.post_id = {$wpdb->posts}.ID AND wp_rd1.meta_key = 'wpcf-phone'";
-          $pieces['orderby'] = "wp_rd1.meta_value $order, " . $pieces['orderby'];
-          break;
-        case 'wp-phone' :
-          $pieces['join'] .= " LEFT JOIN $wpdb->postmeta wp_rd1 ON wp_rd1.post_id = {$wpdb->posts}.ID AND wp_rd1.meta_key = 'wpcf-phone'";
-          $pieces['orderby'] = "wp_rd1.meta_value $order, " . $pieces['orderby'];
-          break;
-        case 'wp-inactive_days' :
-          $pieces['fields']  .= " , IFNULL( TIMESTAMPDIFF( DAY, MAX(p1.post_date), NOW() ), 0 ) as inactive_days";
-          $pieces['join'] = " LEFT JOIN {$wpdb->postmeta} ON ( {$wpdb->posts}.ID = {$wpdb->postmeta}.meta_value ) LEFT JOIN {$wpdb->posts} p1 ON {$wpdb->postmeta}.post_id = p1.ID AND p1.post_type = 'wp-type-activity'";
-
-          $pieces['where'] = " AND {$wpdb->posts}.post_type = 'wp-type-contacts' AND ({$wpdb->posts}.post_status = 'publish' OR {$wpdb->posts}.post_status = 'refunded' OR {$wpdb->posts}.post_status = 'failed' OR {$wpdb->posts}.post_status = 'revoked' OR {$wpdb->posts}.post_status = 'abandoned' OR {$wpdb->posts}.post_status = 'active' OR {$wpdb->posts}.post_status = 'inactive' OR {$wpdb->posts}.post_status = 'future' OR {$wpdb->posts}.post_status = 'draft' OR {$wpdb->posts}.post_status = 'pending' OR {$wpdb->posts}.post_status = 'private')";
-          $pieces['groupby'] = " {$wpdb->posts}.ID";
-          $pieces['orderby'] = " inactive_days $order";
-          break;
-        case 'wp-contact-type' :
-          $pieces['fields'] .= " ,(SELECT name FROM {$wpdb->terms} WHERE term_id = MAX(tr1.term_taxonomy_id)) as contact_type";
-          $pieces['join'] .= " LEFT JOIN {$wpdb->postmeta} pm2 ON {$wpdb->posts}.ID = pm2.post_id LEFT JOIN {$wpdb->posts} p11 ON p11.ID = pm2.meta_value AND p11.post_type IN ('wp-type-contacts', 'wp-type-opportunity') LEFT JOIN {$wpdb->term_relationships} tr1 ON tr1.object_id = p11.ID AND tr1.term_taxonomy_id IN ( SELECT term_id FROM {$wpdb->terms} WHERE slug IN ('wp-type-ind-contact', 'wp-type-org-contact'))";
-          $pieces['groupby'] = " {$wpdb->posts}.ID";
-          $pieces['orderby'] = " contact_type $order";
-          break;
-        default :
-          $pieces['join'] .= " LEFT JOIN $wpdb->postmeta wp_rd1 ON wp_rd1.post_id = {$wpdb->posts}.ID AND wp_rd1.meta_key = '" . $orderby . "'";
-          $pieces['orderby'] = "wp_rd1.meta_value $order, " . $pieces['orderby'];
-          break;
-      }
-    }
+	// @TODO: Added by WebAccess, validate, deff OFF
+	if (FALSE) {
+		if( $pagenow == 'edit.php' && isset( $_GET['post_type'] ) && 'wp-type-contacts' == $_GET['post_type']  && $query->is_main_query() )  {
+		  $user = wp_get_current_user();
+			if( 'wp-type-contacts' == $_GET['post_type'] && ( !isset( $_GET['wp-type-tags'] ) && !isset( $_GET['wp-type-contacts-subtype'] ) && !isset( $_GET['wp-type-group'] ) ) ) {
+			  $pieces['join'] = " LEFT JOIN wp_term_relationships ON (wp_posts.ID = wp_term_relationships.object_id) LEFT JOIN wp_postmeta ON ( wp_posts.ID = wp_postmeta.post_id ) LEFT JOIN wp_terms ON (wp_term_relationships.term_taxonomy_id = wp_terms.term_id) LEFT JOIN wp_postmeta wp_rd ON wp_rd.post_id = wp_posts.ID AND wp_rd.meta_key = 'meta_value'";
+			} elseif( 'wp-type-contacts' == $_GET['post_type'] && ( isset( $_GET['wp-type-contacts-subtype'] ) && $_GET['wp-type-contacts-subtype'] != '' ) && ( ( isset( $_GET['wp-type-tags'] ) && $_GET['wp-type-tags'] == '' ) && ( isset( $_GET['wp-type-group'] ) && $_GET['wp-type-group'] == '' ) ) || ( !isset( $_GET['wp-type-tags'] ) && !isset( $_GET['wp-type-group'] ) ) ) {
+			  $pieces['join'] = " LEFT JOIN wp_term_relationships ON (wp_posts.ID = wp_term_relationships.object_id) LEFT JOIN wp_postmeta ON ( wp_posts.ID = wp_postmeta.post_id ) LEFT JOIN wp_terms ON (wp_term_relationships.term_taxonomy_id = wp_terms.term_id) LEFT JOIN wp_postmeta wp_rd ON wp_rd.post_id = wp_posts.ID AND wp_rd.meta_key = 'meta_value'";
+			  $subtype = $_GET['wp-type-contacts-subtype'];
+			  $pieces['where'] .= " AND wp_term_relationships.term_taxonomy_id = (SELECT term_id FROM wp_terms WHERE slug = '$subtype' )";
+			} elseif ( ( isset( $_GET['wp-type-group'] ) && $_GET['wp-type-group'] != '' ) && 'wp-type-contacts' == $_GET['post_type'] && ( ( isset( $_GET['wp-type-contacts-subtype'] ) && $_GET['wp-type-contacts-subtype'] == '' ) && ( isset( $_GET['wp-type-tags'] ) && $_GET['wp-type-tags'] == '' ) ) || ( !isset( $_GET['wp-type-contacts-subtype'] ) && !isset( $_GET['wp-type-group'] ) ) ) {
+			  $group = $_GET['wp-type-group'];
+			  $pieces['join'] = " LEFT JOIN wp_term_relationships ON (wp_posts.ID = wp_term_relationships.object_id) LEFT JOIN wp_postmeta ON ( wp_posts.ID = wp_postmeta.post_id ) LEFT JOIN wp_terms ON (wp_term_relationships.term_taxonomy_id = wp_terms.term_id) LEFT JOIN wp_postmeta wp_rd ON wp_rd.post_id = wp_posts.ID AND wp_rd.meta_key = 'meta_value'";
+			  $pieces['where'] .= " AND wp_term_relationships.term_taxonomy_id = (SELECT term_id FROM wp_terms WHERE slug = '$group')";
+			} elseif ( ( isset( $_GET['wp-type-tags'] ) && $_GET['wp-type-tags'] != '' ) && 'wp-type-contacts' == $_GET['post_type'] && ( ( isset( $_GET['wp-type-group'] ) && $_GET['wp-type-group'] == '' ) && ( isset( $_GET['wp-type-contacts-subtype'] ) && $_GET['wp-type-contacts-subtype'] == '' ) ) || ( !isset( $_GET['wp-type-contacts-subtype'] ) && !isset( $_GET['wp-type-tags'] ) ) ) {
+			  $tags = $_GET['wp-type-tags'];
+			  $pieces['join'] = " LEFT JOIN wp_term_relationships ON (wp_posts.ID = wp_term_relationships.object_id) LEFT JOIN wp_postmeta ON ( wp_posts.ID = wp_postmeta.post_id ) LEFT JOIN wp_terms ON (wp_term_relationships.term_taxonomy_id = wp_terms.term_id) LEFT JOIN wp_postmeta wp_rd ON wp_rd.post_id = wp_posts.ID AND wp_rd.meta_key = 'meta_value'";
+			  $pieces['where'] .= " AND wp_term_relationships.term_taxonomy_id = (SELECT term_id FROM wp_terms WHERE slug = '$tags')";
+			} elseif( ( ( isset( $_GET['wp-type-tags'] ) && $_GET['wp-type-tags'] != '' ) && ( isset( $_GET['wp-type-group'] ) && $_GET['wp-type-group'] != '' ) && ( isset( $_GET['wp-type-contacts-subtype'] ) && $_GET['wp-type-contacts-subtype'] != '' ) ) && 'wp-type-contacts' == $_GET['post_type'] && ( isset( $_GET['filter_action']  ) && $_GET['filter_action'] == 'Filter' ) ) {
+			  $tags = $_GET['wp-type-tags'];
+			  $group = $_GET['wp-type-group'];
+			  $contact_type = $_GET['wp-type-contacts-subtype'];
+			  $pieces['join'] = " LEFT JOIN wp_term_relationships ON (wp_posts.ID = wp_term_relationships.object_id) LEFT JOIN wp_term_relationships tags ON (wp_posts.ID = tags.object_id) LEFT JOIN wp_term_relationships tribe ON (wp_posts.ID = tribe.object_id) LEFT JOIN wp_postmeta ON ( wp_posts.ID = wp_postmeta.post_id ) LEFT JOIN wp_terms ON (wp_term_relationships.term_taxonomy_id = wp_terms.term_id) LEFT JOIN wp_postmeta wp_rd ON wp_rd.post_id = wp_posts.ID AND wp_rd.meta_key = 'meta_value'";
+			  $pieces['where'] .= " AND wp_term_relationships.term_taxonomy_id = (SELECT term_id FROM wp_terms WHERE slug = '$contact_type') AND tags.term_taxonomy_id = (SELECT term_id FROM wp_terms WHERE slug = '$group') AND tribe.term_taxonomy_id = (SELECT term_id FROM wp_terms WHERE slug = '$tags')";
+			} elseif( ( ( isset( $_GET['wp-type-tags'] ) && $_GET['wp-type-tags'] != '' ) && ( isset( $_GET['wp-type-contacts-subtype'] ) && $_GET['wp-type-contacts-subtype'] != '' ) && ( $_GET['wp-type-group'] == '' && isset( $_GET['wp-type-group'] ) ) ) && 'wp-type-contacts' == $_GET['post_type'] ) {
+			  $tags = $_GET['wp-type-tags'];
+			  $contact_type = $_GET['wp-type-contacts-subtype'];
+			  $pieces['join'] = " LEFT JOIN wp_term_relationships tags ON (wp_posts.ID = tags.object_id) LEFT JOIN wp_term_relationships tribe ON (wp_posts.ID = tribe.object_id) LEFT JOIN wp_postmeta ON ( wp_posts.ID = wp_postmeta.post_id ) LEFT JOIN wp_terms ON (wp_term_relationships.term_taxonomy_id = wp_terms.term_id) LEFT JOIN wp_postmeta wp_rd ON wp_rd.post_id = wp_posts.ID AND wp_rd.meta_key = 'meta_value'";
+			  $pieces['where'] .= " AND wp_term_relationships.term_taxonomy_id = (SELECT term_id FROM wp_terms WHERE slug = '$contact_type') AND tags.term_taxonomy_id = (SELECT term_id FROM wp_terms WHERE slug = '$tags')";
+			} elseif( ( ( isset( $_GET['wp-type-group'] ) && $_GET['wp-type-group'] != '' ) && ( isset( $_GET['wp-type-contacts-subtype'] ) && $_GET['wp-type-contacts-subtype'] != '' ) && ( $_GET['wp-type-tags'] == '' && isset( $_GET['wp-type-tags'] ) ) ) && 'wp-type-contacts' == $_GET['post_type'] ) {
+			  $group = $_GET['wp-type-group'];
+			  $contact_type = $_GET['wp-type-contacts-subtype'];
+			  $pieces['join'] = " LEFT JOIN wp_term_relationships type ON (wp_posts.ID = type.object_id) LEFT JOIN wp_term_relationships tribe ON (wp_posts.ID = tribe.object_id) LEFT JOIN wp_postmeta ON ( wp_posts.ID = wp_postmeta.post_id ) LEFT JOIN wp_terms ON (wp_term_relationships.term_taxonomy_id = wp_terms.term_id) LEFT JOIN wp_postmeta wp_rd ON wp_rd.post_id = wp_posts.ID AND wp_rd.meta_key = 'meta_value'";
+			  $pieces['where'] .= " AND wp_term_relationships.term_taxonomy_id = (SELECT term_id FROM wp_terms WHERE slug = '$contact_type') AND tribe.term_taxonomy_id = (SELECT term_id FROM wp_terms WHERE slug = '$group')";
+			} elseif( ( ( isset( $_GET['wp-type-tags'] ) && $_GET['wp-type-tags'] != '' ) && ( isset( $_GET['wp-type-group'] ) && $_GET['wp-type-group'] != '' ) && ( $_GET['wp-type-contacts-subtype'] == '' && isset( $_GET['wp-type-contacts-subtype'] ) ) ) && 'wp-type-contacts' == $_GET['post_type'] ) {
+			  $tags = $_GET['wp-type-tags'];
+			  $group = $_GET['wp-type-group'];
+			  $pieces['join'] = " LEFT JOIN wp_term_relationships ON (wp_posts.ID = wp_term_relationships.object_id) LEFT JOIN wp_term_relationships tags ON (wp_posts.ID = tags.object_id) LEFT JOIN wp_postmeta ON ( wp_posts.ID = wp_postmeta.post_id ) LEFT JOIN wp_terms ON (wp_term_relationships.term_taxonomy_id = wp_terms.term_id) LEFT JOIN wp_postmeta wp_rd ON wp_rd.post_id = wp_posts.ID AND wp_rd.meta_key = 'meta_value'";
+			  $pieces['where'] .= " AND wp_term_relationships.term_taxonomy_id = (SELECT term_id FROM wp_terms WHERE slug = '$group') AND tags.term_taxonomy_id = (SELECT term_id FROM wp_terms WHERE slug = '$tags')";
+			}
+		}
+	}
     return $pieces;
   }
 
@@ -1020,10 +1079,21 @@ LEFT JOIN {$wpdb->postmeta} pm1 ON pm1.post_id = SUBSTRING( pm1.meta_value, 15, 
       if ( $wp_version >= '4.7' ) {?>
       <script>
           jQuery(document).ready(function() {
-              jQuery( ".wrap a.page-title-action" ).attr("href", "#");
-              jQuery( ".wrap a.page-title-action" ).click(function() {
-                console.log('page-title-action clicked');
-                  jQuery( "#dialog" ).dialog( "open" );
+				var $dialog = jQuery("#dialog");
+				$dialog.dialog({                   
+					'dialogClass'   : 'wp-dialog',           
+					'modal'         : true,
+					'autoOpen'      : false, 
+					'closeOnEscape' : true,      
+					'buttons'       : {
+						"Close": function() {
+							jQuery(this).dialog('close');
+						}
+					}
+				});
+				jQuery( ".wrap a.page-title-action" ).attr("href", "#").click(function(event) {
+					event.preventDefault();
+					$dialog.dialog('open');
                 });
             });
       </script><?php
@@ -1076,9 +1146,19 @@ LEFT JOIN {$wpdb->postmeta} pm1 ON pm1.post_id = SUBSTRING( pm1.meta_value, 15, 
     // Dialog box for Contact and touchpoint page
   }
 
+  function remove_box()
+  {
+    remove_post_type_support( 'wp-type-contacts', 'title' );
+    remove_post_type_support( 'wp-type-contacts', 'editor' );
+    remove_post_type_support( 'wp-type-activity', 'editor' );
+  }
+
   function ukuupeople_menu() {
-    add_submenu_page( null, __( 'Add New Contact', 'UkuuPeople' ), __( 'Add New Contact', 'UkuuPeople' ), 'access_ukuupeoples', 'add-new-contact', array( $this, 'add_new_contact_type') );
+    // @TODO: Why Null?
+    //add_submenu_page( null,                                  __( 'Add New Contact', 'UkuuPeople' ), __( 'Add New Contact', 'UkuuPeople' ), 'access_ukuupeoples', 'add-new-contact', array( $this, 'add_new_contact_type') );
+    add_submenu_page( 'edit.php?post_type=wp-type-contacts', __( 'Add New Contact', 'UkuuPeople' ), __( 'Add New Contact', 'UkuuPeople' ), 'access_ukuupeoples', 'add-new-contact', array( $this, 'add_new_contact_type') );
     add_submenu_page( 'edit.php?post_type=wp-type-contacts' , __( 'TouchPoint', 'UkuuPeople' ), __( 'TouchPoints', 'UkuuPeople' ), 'access_touchpoints', 'edit.php?post_type=wp-type-activity', '' );
+	
     require_once( UKUUPEOPLE_ABSPATH.'/includes/add-ons.php' );
     $ukuupeople_add_ons_page = add_submenu_page( 'edit.php?post_type=wp-type-contacts', __( 'UkuuPeople Add-ons', 'UkuuPeople' ), __( 'Add-ons', 'UkuuPeople' ), 'install_plugins', 'ukuupeople-addons', 'ukuupeople_add_ons_page' );
     if ( current_user_can( 'manage_categories' ) ) {
@@ -1234,9 +1314,12 @@ LEFT JOIN {$wpdb->postmeta} pm1 ON pm1.post_id = SUBSTRING( pm1.meta_value, 15, 
    * @param type $query
    */
   function posts_filter_touchpoint_contact( $query ) {
+    global $pagenow;
     $qv = &$query->query_vars;//grab a reference to manipulate directly
-    Global $pagenow;
     if( $pagenow =='edit.php' && isset( $_GET['post_type'] ) && 'wp-type-contacts' == $_GET['post_type']  && $query->is_main_query() ) {
+	  if( !empty ( $_GET['touchpoint-contact'] ) ) {
+        $qv['meta_query'][] = array( 'value' => $_GET['touchpoint-contact'] );
+      }
       /* If this drop-down has been affected, add a meta query to the query
        *
        */
@@ -1460,6 +1543,8 @@ LEFT JOIN {$wpdb->postmeta} pm1 ON pm1.post_id = SUBSTRING( pm1.meta_value, 15, 
    */
   public static function ukuuCRM_dashboard_createactivity_content() {
     wp_enqueue_media();
+	// @TODO: Origin did above, WebAccess did below.  Above is intense (look it up), but below MAY be more lean...
+    //wp_enqueue_script( 'media-upload' );
     wp_enqueue_script( 'thickbox' );
     wp_enqueue_style( 'thickbox' );
     wp_enqueue_script( 'ukuucrm', UKUUPEOPLE_RELPATH.'/script/ukuucrm.js' , array('jquery','media-upload','thickbox') );
@@ -1524,9 +1609,9 @@ LEFT JOIN {$wpdb->postmeta} pm1 ON pm1.post_id = SUBSTRING( pm1.meta_value, 15, 
                  }
                }
             });
-
            $( "#dashboard-widgets-wrap #ukuuCRM-dashboard-createactivity-widget .quickadd input[name='dassign']" ).click(function() {
-               $( "#dialog" ).dialog( "open" );
+              $( "#touchpoint_assign_name_display" ).show();
+              $( ".seprate" ).show();
              });
            var datearr = {
            dateFormat : 'mm-dd-yy',
@@ -2396,20 +2481,17 @@ function insert_taxonomy_terms() {
                   ),
                 ));
         $loop = get_posts( $args );
-        $inactive_days_default = 0;
+        $inactive_days = 0;
         if( isset( $loop[0]->ID ) ) {
           $post_obj = get_post( $loop[0]->ID );
           $created_date  = strtotime( $post_obj->post_date );
           $currentDateTime = strtotime( date('Y-m-d H:i:s' ) );
           $inactive_days = round(($currentDateTime - $created_date) /60/60/24);
           if ( $inactive_days > 100 ) {
-            $inactive_days_default = "> 100";
-          }
-          else {
-            $inactive_days_default = $inactive_days;
+            $inactive_days = "> 100";
           }
         }
-        echo $inactive_days_default;
+        echo $inactive_days;
         break;
       case 'wp-type-activity': // Activity chart
         $monthsArray[date('Y')][date('n')] =  date( 'n' );
@@ -2893,6 +2975,7 @@ function insert_taxonomy_terms() {
         $contact_id = get_the_ID();
         echo "<div class='edit_contact'><a href='#wpcf-group-edit-contact-info' class='button button-primary'>Edit Contact</a></div>";
         echo "<div><a href='".admin_url()."post-new.php?post_type=wp-type-activity&cid=$contact_id' class='button button-primary'>Add TouchPoint</a></div>";
+		
         echo '</div></div></div>';
         echo '<div id="contactdetailsblock"><table id="contactdetail-table">';
 
@@ -3227,5 +3310,6 @@ function insert_taxonomy_terms() {
        }
      }
      return $pieces;
-   }
+  }
+  
 }

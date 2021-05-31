@@ -237,6 +237,51 @@ jQuery(document).ready(function($) {
     	return $( "<li>" ).append( "<a>" + item.label + "</a>" ).appendTo( ul );
     };
 
+  function split( val ) {
+    return val.split( /,\s*/ );
+  }
+
+  function extractLast( term ) {
+    return split( term ).pop();
+  }
+
+// autocomplete for quick add touchpoint "assign to" comma seprate.
+   jQuery( "#dashboard-widgets-wrap #ukuuCRM-dashboard-createactivity-widget .quickadd input[name='touchpoint_assign_name_display']" )
+    .autocomplete({
+	minLength: 0,
+   source: function( request, response ) {
+response( jQuery.ui.autocomplete.filter(
+assing_result, extractLast( request.term ) ) );
+},
+	focus: function( event, ui ) {
+	    return false;
+	},
+	select: function( event, ui ) {
+        var terms = split( this.value );
+        terms.pop();
+        this.value = terms.join( ", " );
+        var selected_label = ui.item.label;
+        var selected_value = ui.item.value;
+
+        var labels = jQuery(".quickadd input[name='touchpoint_assign_name_display']").val();
+        var values = jQuery( "#touchpoint_assign_id" ).val();
+
+        if(labels == "") {
+        jQuery(".quickadd input[name='touchpoint_assign_name_display']").val(selected_label);
+        jQuery( "#touchpoint_assign_id" ).val(selected_value);
+      }
+       else {
+        jQuery(".quickadd input[name='touchpoint_assign_name_display']").val(labels+","+selected_label);
+        jQuery( "#touchpoint_assign_id" ).val(values+","+selected_value);
+      }
+	    return false;
+	}
+    }).autocomplete( "instance" )._renderItem = function( ul, item ) {
+	return jQuery( "<li>" )
+	    .append( "<a>" + item.label + "</a>" )
+	    .appendTo( ul );
+    };
+
     // autocomplete for quick add touchpoint
     $( "#dashboard-widgets-wrap #ukuuCRM-dashboard-createactivity-widget .quickadd input[name='dname']" ).autocomplete({
 		//source: availableTags,
@@ -336,10 +381,27 @@ jQuery(document).ready(function($) {
 
     	frame.open();
 	});
-
-	$('.post-type-wp-type-activity .over-image').hide();
-  	$('.post-type-wp-type-activity .inner-attachment-first').hide();
-  	$(".post-type-wp-type-activity .attachment-first").hover(function(){
+	
+	$('#quickAddform').trigger('reset');
+		$(".quickadd #filename").hide();
+		$(".quickadd #touchpoint_assign_name_display").hide();
+		$(".quickadd .seprate").hide();
+	
+			$("#dashboard-widgets-wrap #ukuuCRM-dashboard-createactivity-widget .quickadd input[name='dupload']").click( function() {
+		formfield = $('.quickadd #filename').attr('name');
+		tb_show('', 'media-upload.php?type=image&amp;TB_iframe=true');
+		return false;
+			});
+	
+			window.send_to_editor = function(html) {
+		imgurl = $('img',html).attr('src');
+		$('.quickadd #filename').val(imgurl);
+		$(".quickadd #filename").show();
+		tb_remove();
+    }
+		$('.post-type-wp-type-activity .over-image').hide();
+		$('.post-type-wp-type-activity .inner-attachment-first').hide();
+		$(".post-type-wp-type-activity .attachment-first").hover(function(){
 		var id = this.id;
 		$( '.post-type-wp-type-activity #'+id+' .over-image' ).show();
 		$( '.post-type-wp-type-activity #'+id+' .inner-attachment-first' ).show();
@@ -528,4 +590,14 @@ jQuery('.post-type-wp-type-activity #post').on('submit', function (e) {
 		jQuery('.errordesc').remove();
 		return true;
     }
+});
+
+ // Alter taxonomy field for single-selection in quick edit (for touchpoint only)
+ jQuery(".wp-type-activity-types-checklist input[type='checkbox']").on('click', function () {
+  var current_selection = jQuery(this).val();
+
+  jQuery(".cat-checklist input[type='checkbox']").each( function (index, value) {
+    if ( jQuery(this).val() != current_selection )
+      jQuery(this).prop('checked', false);
+  });
 });
