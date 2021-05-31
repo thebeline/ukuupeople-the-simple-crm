@@ -1383,10 +1383,7 @@ class UkuuPeople {
     unset( $wp_meta_boxes['wp-type-contacts']['normal']['default']['wpcf-post-relationship'] );
     unset( $wp_meta_boxes['wp-type-contacts']['normal']['core']['slugdiv'] );
 
-    $screens = array( 'wp-type-activity' );
-    foreach ( $screens as $screen ) {
-      add_action( 'edit_form_after_editor', array( $this , 'ukuu_custom_touchpoint_list' ) );
-    }
+    add_action( 'edit_form_after_editor', array( $this , 'ukuu_custom_touchpoint_list' ) );
   }
 
   /**
